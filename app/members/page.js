@@ -24,7 +24,7 @@ const CLUB_META = {
   "Tottenham":    { short: "TOT", color: "#94a3b8" },
   "Man United":   { short: "MUN", color: "#b91c1c" },
 };
-const VPS_SYNC_URL = "http://178.105.156.74:3001/sync";
+const VPS_SYNC_URL = "/api/sync";
 const BLANK = { name: "", email: "", password: "", membership: "", club: "", points: 0, status: "inactive" };
 
 
