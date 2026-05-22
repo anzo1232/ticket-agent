@@ -7,7 +7,7 @@ import Btn from "@/components/Btn";
 import PageHeader from "@/components/PageHeader";
 import Modal from "@/components/Modal";
 import FormField, { inp } from "@/components/FormField";
-import { Users, UserCheck, UserX, Upload, Search, Plus, Pencil, Trash2, Eye, EyeOff, AlertTriangle } from "lucide-react";
+import { Users, UserCheck, UserX, Upload, Search, Plus, Pencil, Trash2, Eye, EyeOff, AlertTriangle, RefreshCw } from "lucide-react";
 
 const CLUBS = ["Arsenal FC", "Man City", "Chelsea FC", "Liverpool FC", "Tottenham", "Man United"];
 const STATUSES = ["eligible", "inactive", "do_not_use"];
@@ -24,7 +24,35 @@ const CLUB_META = {
   "Tottenham":    { short: "TOT", color: "#94a3b8" },
   "Man United":   { short: "MUN", color: "#b91c1c" },
 };
+const VPS_SYNC_URL = "http://178.105.156.74:3001/sync";
 const BLANK = { name: "", email: "", password: "", membership: "", club: "", points: 0, status: "inactive" };
+
+
+function ChelseaSyncBtn({ member, onSynced }) {
+  const [status, setStatus] = useState("idle");
+  const [msg, setMsg] = useState("");
+  if (member.club !== "Chelsea FC") return null;
+  const handleSync = async () => {
+    if (!member.email) { setStatus("err"); setMsg("No email"); return; }
+    setStatus("syncing"); setMsg("");
+    try {
+      const res = await fetch(VPS_SYNC_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: member.email, member_id: member.id }) });
+      const data = await res.json();
+      if (data.success) { setStatus("ok"); setMsg((data.member?.points ?? "?") + " pts"); onSynced(); }
+      else { setStatus("err"); setMsg(data.error || "Failed"); }
+    } catch { setStatus("err"); setMsg("VPS unreachable"); }
+    setTimeout(() => setStatus("idle"), 4000);
+  };
+  const col = { idle: "#1d4ed8", syncing: "#475569", ok: "#22c55e", err: "#ef4444" };
+  const lbl = { idle: "Sync", syncing: "…", ok: msg, err: msg || "Err" };
+  return (
+    <button onClick={handleSync} disabled={status === "syncing"} title="Sync Chelsea points" style={{ background: col[status] + "18", border: "1px solid " + col[status] + "40", borderRadius: 6, padding: "5px 8px", cursor: status === "syncing" ? "default" : "pointer", color: col[status], display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>
+      <RefreshCw size={11} style={{ animation: status === "syncing" ? "spin 1s linear infinite" : "none" }} />
+      {lbl[status]}
+      <style>{"@keyframes spin { to { transform: rotate(360deg); } }"}</style>
+    </button>
+  );
+}
 
 /* ── Member form (shared by Add + Edit) ── */
 function MemberForm({ initial, onSave, onCancel, saving, error }) {
@@ -389,7 +417,8 @@ export default function MembersPage() {
                     </td>
                     <td style={{ padding: "11px 16px" }}><Badge label={s.label} color={s.color} /></td>
                     <td style={{ padding: "11px 16px" }}>
-                      <div style={{ display: "flex", gap: 4 }}>
+                      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                        <ChelseaSyncBtn member={m} onSynced={fetch} />
                         <button onClick={() => { setFormError(""); setEditTarget(m); }} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "5px 8px", cursor: "pointer", color: "#94a3b8", display: "flex" }}>
                           <Pencil size={13} />
                         </button>
