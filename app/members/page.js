@@ -29,28 +29,107 @@ const BLANK = { name: "", email: "", password: "", membership: "", club: "", poi
 
 
 function ChelseaSyncBtn({ member, onSynced }) {
-  const [status, setStatus] = useState("idle");
+  const [open, setOpen] = useState(false);
+  const [chelseaEmail, setChelseaEmail] = useState(member.chelsea_email || member.email || "");
+  const [chelseaPass, setChelseaPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [status, setStatus] = useState("idle"); // idle | syncing | ok | err
   const [msg, setMsg] = useState("");
+
   if (member.club !== "Chelsea FC") return null;
+
+  const handleOpen = () => {
+    setChelseaEmail(member.chelsea_email || member.email || "");
+    setChelseaPass("");
+    setStatus("idle");
+    setMsg("");
+    setOpen(true);
+  };
+
   const handleSync = async () => {
-    if (!member.email) { setStatus("err"); setMsg("No email"); return; }
+    if (!chelseaEmail) { setMsg("Enter a Chelsea email"); return; }
+    if (!chelseaPass) { setMsg("Enter a password"); return; }
     setStatus("syncing"); setMsg("");
     try {
-      const res = await fetch(VPS_SYNC_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: member.email, member_id: member.id }) });
+      const res = await fetch(VPS_SYNC_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: chelseaEmail, password: chelseaPass }),
+      });
       const data = await res.json();
-      if (data.success) { setStatus("ok"); setMsg((data.member?.points ?? "?") + " pts"); onSynced(); }
-      else { setStatus("err"); setMsg(data.error || "Failed"); }
-    } catch { setStatus("err"); setMsg("VPS unreachable"); }
-    setTimeout(() => setStatus("idle"), 4000);
+      if (data.success) {
+        const points = data.loyalty_points ?? data.points ?? null;
+        const tier = data.membership_tier ?? data.tier ?? null;
+        await supabase.from("members").update({
+          chelsea_email: chelseaEmail,
+          loyalty_points: points,
+          membership_tier: tier,
+          last_synced: new Date().toISOString(),
+        }).eq("id", member.id);
+        setStatus("ok");
+        setMsg(points != null ? `${points} pts${tier ? ` · ${tier}` : ""}` : "Synced — points unavailable");
+        onSynced();
+        setTimeout(() => setOpen(false), 2500);
+      } else {
+        setStatus("err");
+        setMsg(data.error || "Sync failed");
+      }
+    } catch {
+      setStatus("err");
+      setMsg("VPS unreachable");
+    }
   };
-  const col = { idle: "#1d4ed8", syncing: "#475569", ok: "#22c55e", err: "#ef4444" };
-  const lbl = { idle: "Sync", syncing: "…", ok: msg, err: msg || "Err" };
+
   return (
-    <button onClick={handleSync} disabled={status === "syncing"} title="Sync Chelsea points" style={{ background: col[status] + "18", border: "1px solid " + col[status] + "40", borderRadius: 6, padding: "5px 8px", cursor: status === "syncing" ? "default" : "pointer", color: col[status], display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>
-      <RefreshCw size={11} style={{ animation: status === "syncing" ? "spin 1s linear infinite" : "none" }} />
-      {lbl[status]}
-      <style>{"@keyframes spin { to { transform: rotate(360deg); } }"}</style>
-    </button>
+    <>
+      {(member.loyalty_points != null || member.membership_tier) && (
+        <div style={{ fontSize: 11, color: "#1d4ed8", background: "rgba(29,78,216,0.1)", border: "1px solid rgba(29,78,216,0.25)", borderRadius: 5, padding: "3px 7px", fontWeight: 600, whiteSpace: "nowrap" }}>
+          {member.loyalty_points != null ? `${member.loyalty_points} pts` : ""}
+          {member.membership_tier ? `${member.loyalty_points != null ? " · " : ""}${member.membership_tier}` : ""}
+        </div>
+      )}
+      <button onClick={handleOpen} title="Sync Chelsea loyalty points" style={{ background: "rgba(29,78,216,0.1)", border: "1px solid rgba(29,78,216,0.3)", borderRadius: 6, padding: "5px 8px", cursor: "pointer", color: "#1d4ed8", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>
+        <RefreshCw size={11} />
+        Sync
+      </button>
+
+      {open && (
+        <Modal title="Chelsea Loyalty Sync" onClose={() => setOpen(false)} width={400}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <p style={{ fontSize: 12, color: "#64748b" }}>
+              Enter <strong style={{ color: "#94a3b8" }}>{member.name}</strong>'s Chelsea eticketing credentials to fetch loyalty data.
+            </p>
+            <FormField label="Chelsea Email">
+              <input style={inp} value={chelseaEmail} onChange={e => setChelseaEmail(e.target.value)} placeholder="chelsea@example.com" type="email" />
+            </FormField>
+            <FormField label="Chelsea Password">
+              <div style={{ position: "relative" }}>
+                <input style={{ ...inp, paddingRight: 36 }} value={chelseaPass} onChange={e => setChelseaPass(e.target.value)} placeholder="eticketing.co.uk password" type={showPass ? "text" : "password"} />
+                <button type="button" onClick={() => setShowPass(s => !s)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#64748b", display: "flex" }}>
+                  {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </FormField>
+
+            {msg && (
+              <div style={{ background: status === "ok" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", border: `1px solid ${status === "ok" ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}`, borderRadius: 7, padding: "8px 12px", fontSize: 12, color: status === "ok" ? "#22c55e" : "#ef4444" }}>
+                {status === "ok" ? "✓ " : "✗ "}{msg}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+              <Btn variant="secondary" onClick={() => setOpen(false)}>Cancel</Btn>
+              <Btn onClick={handleSync} disabled={status === "syncing"}>
+                {status === "syncing"
+                  ? <><RefreshCw size={12} style={{ animation: "spin 1s linear infinite" }} /> Syncing…</>
+                  : "Sync Loyalty Points"}
+              </Btn>
+            </div>
+            <style>{"@keyframes spin { to { transform: rotate(360deg); } }"}</style>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 

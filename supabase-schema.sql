@@ -5,16 +5,26 @@
 
 -- Members
 create table if not exists members (
-  id          bigserial primary key,
-  name        text not null,
-  email       text,
-  password    text,
-  membership  text,
-  club        text,
-  points      int default 0,
-  status      text default 'inactive',
-  created_at  timestamptz default now()
+  id               bigserial primary key,
+  name             text not null,
+  email            text,
+  password         text,
+  membership       text,
+  club             text,
+  points           int default 0,
+  status           text default 'inactive',
+  chelsea_email    text,
+  loyalty_points   int,
+  membership_tier  text,
+  last_synced      timestamptz,
+  created_at       timestamptz default now()
 );
+
+-- Migration: run these if the table already exists
+-- alter table members add column if not exists chelsea_email text;
+-- alter table members add column if not exists loyalty_points int;
+-- alter table members add column if not exists membership_tier text;
+-- alter table members add column if not exists last_synced timestamptz;
 
 -- Ticket Drops
 create table if not exists drops (
